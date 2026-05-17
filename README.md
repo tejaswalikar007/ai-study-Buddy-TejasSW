@@ -22,6 +22,43 @@ Built with an elegant Glassmorphism UI and powered by Google's latest Gemini AI 
 
 ---
 
+## 🏗️ System Architecture
+
+The AI Study Buddy is built on a resilient, dual-layered architecture designed to prioritize speed, reliability, and user experience:
+
+- **Frontend Layer (Client-Side)**: 
+  - A responsive web interface built with vanilla HTML, CSS, and JS.
+  - Features a custom Glassmorphism UI and dynamic DOM updates for smooth interactions.
+  - Implements a robust client-side Markdown rendering engine that formats AI outputs beautifully into structured paragraphs, lists, and code blocks.
+- **Backend Server (Flask)**: 
+  - A lightweight, fast Python Flask application handling routing, API requests, and file processing (e.g., PDF text extraction).
+  - Integrates **Flask-Limiter** for rate limiting to prevent API abuse and ensure server stability.
+- **AI Integration Layer (Cloud & Local)**:
+  - **Primary AI (Google Gemini)**: Connects dynamically to Google's latest generative AI models (e.g., `gemini-2.5-flash`) for lightning-fast text generation, summarization, and reasoning.
+  - **Local Fallback Models (Hugging Face)**: If the primary API fails, the backend seamlessly falls back to pre-trained local NLP models (T5, BART, DistilBERT) ensuring the app remains functional.
+
+---
+
+## 💻 Tech Stack
+
+### Frontend
+- **HTML5 & CSS3**: Vanilla CSS with a custom Dark Mode Glassmorphism design system.
+- **JavaScript (ES6+)**: Vanilla JS for DOM Manipulation and asynchronous requests.
+- **Markdown Rendering**: Client-side parsing to display rich text formats safely.
+
+### Backend
+- **Python 3.x**: Core backend language.
+- **Flask**: Web application framework.
+- **Flask-Limiter**: Rate limiting.
+- **BeautifulSoup4 & Requests**: Web scraping for URL content extraction.
+- **PyMuPDF (fitz)**: Efficient PDF document parsing.
+
+### AI & Machine Learning
+- **Google Generative AI SDK** (`google-generativeai`): Interacting with Gemini models.
+- **Hugging Face Transformers** (`transformers`, `torch`): Running local NLP fallback models (`valhalla/t5-base-qg-hl`, `facebook/bart-large-cnn`, `distilbert-base-uncased-distilled-squad`).
+
+---
+
 ## 🛠️ Installation & Setup
 
 1. **Clone the repository**:

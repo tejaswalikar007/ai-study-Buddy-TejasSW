@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+import base64
 
 # Load environment variables (force override to ensure new keys in .env are always respected)
 load_dotenv(override=True)
@@ -396,6 +397,79 @@ def upload_pdf():
         return render_template("upload_pdf.html", error="PyMuPDF is not installed. Stop the server, run 'pip install pymupdf', and try again.")
     except Exception as e:
         return render_template("upload_pdf.html", error=f"Error processing PDF: {e}")
+
+# 8. Visual Question Answering (VQA)
+@app.route("/visual-qa", methods=["GET", "POST"])
+def visual_qa():
+    if request.method == "GET":
+        return render_template("visual_qa.html")
+
+    question = request.form.get("question", "").strip()
+    image_file = request.files.get("image")
+
+    # ── Validation ────────────────────────────────────────────
+    if not image_file or image_file.filename == "":
+        return render_template("visual_qa.html", error="Please upload an image.")
+    if not question:
+        return render_template("visual_qa.html", error="Please enter a question about the image.")
+
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if image_file.mimetype not in allowed_types:
+        return render_template("visual_qa.html", error="Unsupported file type. Please upload a JPEG, PNG, WEBP, or GIF image.")
+
+    # ── Read & encode image ───────────────────────────────────
+    try:
+        image_bytes = image_file.read()
+        image_b64   = base64.b64encode(image_bytes).decode("utf-8")
+        mime_type   = image_file.mimetype
+    except Exception as e:
+        return render_template("visual_qa.html", error=f"Could not read image: {e}")
+
+    # ── Send to Gemini (multimodal) ───────────────────────────
+    try:
+        import google.generativeai as genai
+        from google.generativeai.types import content_types
+
+        model = get_gemini_model()
+
+        # Build a multimodal prompt: image blob + text question
+        image_part = {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": image_b64,
+            }
+        }
+
+        prompt_parts = [
+            image_part,
+            {
+                "text": (
+                    f"You are an expert visual assistant helping a student study. "
+                    f"Carefully analyse the image and answer the following question in detail:\n\n"
+                    f"Question: {question}\n\n"
+                    f"If the image contains diagrams, charts, equations, or text, describe and explain them "
+                    f"as part of your answer. Be educational and thorough."
+                )
+            }
+        ]
+
+        response = model.generate_content(prompt_parts)
+        answer   = response.text
+
+        # Pass b64 back so we can preview the image in the result page
+        return render_template(
+            "visual_qa_result.html",
+            question=question,
+            answer=answer,
+            image_b64=image_b64,
+            mime_type=mime_type,
+        )
+
+    except Exception as e:
+        return render_template(
+            "visual_qa.html",
+            error=f"Gemini Vision Error: {e}. Make sure your API key supports multimodal models."
+        )
 
 if __name__ == "__main__":
     # Binding to 0.0.0.0 is robust for both IPv4 and IPv6 connections on local networks/machines
