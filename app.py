@@ -7,6 +7,8 @@ import requests
 from bs4 import BeautifulSoup
 import os
 from dotenv import load_dotenv
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Load environment variables (force override to ensure new keys in .env are always respected)
 load_dotenv(override=True)
@@ -71,6 +73,14 @@ def get_gemini_model():
     return genai.GenerativeModel("gemini-2.5-flash")
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", os.urandom(24))
+
+# Setup rate limiting to prevent abuse
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["500 per day", "100 per hour"]
+)
 
 # --- Lazy Loading for Hugging Face Models ---
 _question_generator = None
@@ -110,32 +120,6 @@ def get_qa_pipeline():
 @app.route("/")
 def home():
     return render_template("index.html")
-
-@app.route("/debug-models")
-def debug_models():
-    try:
-        import google.generativeai as genai
-        models = []
-        for m in genai.list_models():
-            models.append({
-                "name": m.name,
-                "supported_generation_methods": m.supported_generation_methods,
-                "description": m.description
-            })
-        return jsonify({
-            "status": "success",
-            "active_key": GEMINI_API_KEY[:6] + "..." + GEMINI_API_KEY[-4:] if GEMINI_API_KEY else None,
-            "models": models
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "active_key": GEMINI_API_KEY[:6] + "..." + GEMINI_API_KEY[-4:] if GEMINI_API_KEY else None,
-            "error_type": str(type(e)),
-            "error_message": str(e)
-        })
-
-
 
 # 1. Question Generator
 @app.route("/question-generator", methods=["GET", "POST"])
@@ -224,30 +208,63 @@ def summarize_text():
     
     return render_template("summarizer_result.html", summary=summary_text, input_text=content_to_summarize[:500] + "...")
 
-# 3. Question Answering
+# 3. Question Answering (Conversational Tutor)
 @app.route("/answer-question", methods=["GET", "POST"])
 def answer_question():
     if request.method == "GET":
         return render_template("qa.html")
+        
     context = request.form.get("context", "").strip()
     question = request.form.get("question", "").strip()
+    history_str = request.form.get("history", "[]")
+    
     if not context or not question:
         return render_template("qa.html", error="Please provide both context and question.")
-    
-    # Primary: Use Gemini API for superior speed and accuracy
+        
     try:
-        prompt = f"Using the following context, answer the question accurately and concisely:\n\nContext:\n{context}\n\nQuestion:\n{question}"
+        import json
+        history = json.loads(history_str)
+    except:
+        history = []
+        
+    # Primary: Use Gemini API for Conversational Chat
+    try:
         model = get_gemini_model()
-        response = model.generate_content(prompt)
-        return render_template("qa_result.html", answer=response.text, question=question, context=context)
+        
+        if not history:
+            chat = model.start_chat(history=[])
+            prompt = f"You are an AI Tutor. Use the following context to answer the student's questions accurately. If the answer isn't in the context, use your general knowledge but clarify that it's outside the text.\n\nContext:\n{context}\n\nStudent Question:\n{question}"
+            response = chat.send_message(prompt)
+            history.append({"role": "user", "parts": [prompt]})
+            history.append({"role": "model", "parts": [response.text]})
+        else:
+            formatted_history = []
+            for msg in history:
+                formatted_history.append({
+                    "role": msg["role"],
+                    "parts": [{"text": msg["parts"][0]}]
+                })
+            chat = model.start_chat(history=formatted_history)
+            response = chat.send_message(question)
+            history.append({"role": "user", "parts": [question]})
+            history.append({"role": "model", "parts": [response.text]})
+            
+        import json
+        history_json = json.dumps(history)
+        return render_template("qa_result.html", history=history, history_json=history_json, context=context)
+        
     except Exception as gemini_err:
         print(f"Gemini QA failed: {gemini_err}. Trying local model fallback...")
         try:
             qa = get_qa_pipeline()
             result = qa(question=question, context=context)
-            return render_template("qa_result.html", answer=result["answer"], question=question, context=context)
+            # Local fallback doesn't support chat history easily
+            history.append({"role": "user", "parts": [question]})
+            history.append({"role": "model", "parts": ["(Fallback) " + result["answer"]]})
+            import json
+            return render_template("qa_result.html", history=history, history_json=json.dumps(history), context=context)
         except Exception as e:
-            return render_template("qa.html", error=f"AI Error: {gemini_err} (Fallback error: {e}). Please check your API key in .env.")
+            return render_template("qa.html", error=f"AI Error: {gemini_err} (Fallback error: {e}). Please check your API key.")
 
 # 4. Study Plan Generator
 @app.route("/study-plan", methods=["GET", "POST"])
@@ -322,6 +339,63 @@ def flashcards():
         return render_template("flashcards_result.html", topic=topic, cards=cards)
     except Exception as e:
         return render_template("flashcards.html", error=f"AI Error: {e}. Please check your API key in .env.")
+
+# 8. PDF Upload
+@app.route("/upload-pdf", methods=["GET", "POST"])
+def upload_pdf():
+    if request.method == "GET":
+        return render_template("upload_pdf.html")
+        
+    if "pdf_file" not in request.files:
+        return render_template("upload_pdf.html", error="No file uploaded.")
+        
+    file = request.files["pdf_file"]
+    if file.filename == "":
+        return render_template("upload_pdf.html", error="No selected file.")
+        
+    if not file.filename.lower().endswith(".pdf"):
+        return render_template("upload_pdf.html", error="Please upload a valid PDF file.")
+        
+    action = request.form.get("action", "summarize")
+    
+    try:
+        import fitz # PyMuPDF
+        pdf_document = fitz.open(stream=file.read(), filetype="pdf")
+        extracted_text = ""
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            extracted_text += page.get_text()
+            
+        if not extracted_text.strip():
+            return render_template("upload_pdf.html", error="Could not extract text. The PDF might be scanned or empty.")
+            
+        # Truncate to reasonable length to avoid token limits
+        extracted_text = extracted_text[:15000]
+            
+        if action == "summarize":
+            prompt = f"Summarize the following document content in a few clear, concise sentences. Use bullet points if helpful:\n\n{extracted_text}"
+            model = get_gemini_model()
+            response = model.generate_content(prompt)
+            return render_template("summarizer_result.html", summary=response.text, input_text=extracted_text[:500] + "...")
+            
+        elif action == "flashcards":
+            prompt = f"Generate 5 educational flashcards for the following document text. Return JSON: [{{'question': '...', 'answer': '...'}}]\n\nText:\n{extracted_text[:5000]}"
+            model = get_gemini_model()
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            if "```json" in text: text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text: text = text.split("```")[1].split("```")[0].strip()
+            import json
+            cards = json.loads(text)
+            return render_template("flashcards_result.html", topic=file.filename, cards=cards)
+            
+        elif action == "qa":
+            return render_template("qa.html", prefilled_context=extracted_text)
+            
+    except ImportError:
+        return render_template("upload_pdf.html", error="PyMuPDF is not installed. Stop the server, run 'pip install pymupdf', and try again.")
+    except Exception as e:
+        return render_template("upload_pdf.html", error=f"Error processing PDF: {e}")
 
 if __name__ == "__main__":
     # Binding to 0.0.0.0 is robust for both IPv4 and IPv6 connections on local networks/machines
