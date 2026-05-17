@@ -97,7 +97,7 @@ def main():
     print("⚠️  Note: If this is the first push, Windows Git Credential Manager may prompt you to authenticate in a popup window.")
     
     # Run interactive push so user can see prompt / complete auth
-    res = subprocess.run("git push -u origin main", shell=True)
+    res = subprocess.run("git push -u origin main -f", shell=True)
     if res.returncode == 0:
         print("\n🎉 SUCCESSFULLY PUSHED CODE TO GITHUB!")
         print("Repository: https://github.com/tejaswalikar007/ai-study-Buddy-TejasSW")
