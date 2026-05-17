@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Study Buddy{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo">AI Study Buddy</a>
+        <div class="nav-links">
+            <a href="/research">Research</a>
+            <a href="/web-search">Web Search</a>
+            <a href="/flashcards">Flashcards</a>
+            <a href="/study-plan">Plan</a>
+            <a href="/question-generator">Q-Gen</a>
+            <a href="/summarizer">Summary</a>
+            <a href="/answer-question">QA</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        document.querySelectorAll('.markdown-content').forEach(el => {
+            el.innerHTML = marked.parse(el.innerText);
+        });
+    </script>
+</body>
+</html>

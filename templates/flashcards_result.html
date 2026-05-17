@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+    <h2>Topic: {{ topic }}</h2>
+    <div id="deck">
+        {% for card in cards %}
+        <div class="flashcard-container {% if loop.index == 1 %}active{% else %}hidden{% endif %}">
+            <div class="flashcard" onclick="this.classList.toggle('is-flipped')">
+                <div class="flashcard-front"><h3>{{ card.question }}</h3></div>
+                <div class="flashcard-back"><p>{{ card.answer }}</p></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+        <button class="btn btn-outline" onclick="move(-1)">Prev</button>
+        <button class="btn btn-primary" onclick="move(1)">Next</button>
+    </div>
+</div>
+<style>.hidden { display: none; } .active { display: block; }</style>
+<script>
+    let idx = 0;
+    const cards = document.querySelectorAll('.flashcard-container');
+    function move(dir) {
+        cards[idx].classList.replace('active', 'hidden');
+        idx = (idx + dir + cards.length) % cards.length;
+        cards[idx].classList.replace('hidden', 'active');
+    }
+</script>
+{% endblock %}

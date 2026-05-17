@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="glass-card" style="max-width: 800px; margin: 2rem auto;">
+    <h2>Answer: {{ question }}</h2>
+    <div class="markdown-content">{{ answer }}</div>
+    <a href="/web-search" class="btn btn-outline" style="margin-top: 2rem;">Ask Another</a>
+</div>
+{% endblock %}

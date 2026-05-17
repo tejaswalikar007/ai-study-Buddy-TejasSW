@@ -1,0 +1,9 @@
+flask
+transformers
+google-generativeai
+torch
+sentencepiece
+requests
+beautifulsoup4
+marked
+python-dotenv
